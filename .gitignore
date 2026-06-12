@@ -1,0 +1,10 @@
+# Simulation build outputs
+build/
+*.vvp
+*.vcd
+
+# Local presentation/export scratch files
+outputs/
+
+# OS/editor noise
+.DS_Store
