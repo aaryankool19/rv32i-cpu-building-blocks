@@ -7,6 +7,7 @@ The current building blocks are:
 
 - Program Counter path
 - Register file
+- Immediate generator
 
 ## What Is the PC?
 
@@ -113,14 +114,68 @@ Writes are synchronous.
 When `reg_write_en` is high, the register selected by `rd_addr` receives
 `rd_data` on the rising edge of `clk`.
 
+## Immediate Generator
+
+An immediate is a constant value stored directly inside a RISC-V instruction.
+Some instructions need small constants, offsets, or upper address bits without
+reading those values from another register.
+
+The immediate generator takes the 32-bit instruction and extracts the immediate
+bits into a normal 32-bit value called `imm_out`.
+
+RISC-V needs this module because different instruction formats store immediate
+bits in different places. Store, branch, and jump immediates are split across
+the instruction instead of sitting in one simple field.
+
+Sign extension matters because many immediates can be negative. If the immediate
+sign bit is 1, the immediate generator fills the upper bits with 1s so the small
+immediate becomes the correct 32-bit signed value.
+
+This project supports these immediate formats:
+
+| Format | Example instructions | What it is used for |
+|---|---|---|
+| I-type | `addi`, `lw`, `jalr` | ALU constants, load offsets, jump-register offsets |
+| S-type | `sw` | store offsets |
+| B-type | `beq`, `bne`, `blt`, `bge` | branch target offsets |
+| U-type | `lui`, `auipc` | upper immediate values |
+| J-type | `jal` | jump target offsets |
+
+The immediate generator does not decide which immediate type to use.
+Later, the control unit will decode the instruction opcode and choose the
+correct `imm_sel` value.
+
+Later in the CPU, `imm_out` will connect to the ALU input mux, branch target
+calculation, and jump target calculation.
+
+```text
+instruction[31:0]
+        |
+        v
+   imm_gen
+        |
+        v
+   imm_out[31:0]
+        |
+        +--> ALU input mux
+        +--> branch/jump target logic
+```
+
+| File | Purpose |
+|---|---|
+| `src/imm_gen.sv` | Extracts and sign-extends RISC-V immediates |
+| `tb/tb_imm_gen.sv` | Tests I, S, B, U, and J immediate formats |
+
 ## Files
 
 - `src/pc_reg.sv`: 32-bit PC register with reset and write enable.
 - `src/pc_plus4.sv`: Adds 4 to the current PC for normal instruction flow.
 - `src/pc_next_mux.sv`: Chooses between `PC + 4` and a branch/jump target.
 - `src/reg_file.sv`: 32-register RV32I-style integer register file.
+- `src/imm_gen.sv`: Extracts and sign-extends RISC-V immediates.
 - `tb/tb_pc_path.sv`: Testbench that connects and verifies the PC path.
 - `tb/tb_reg_file.sv`: Testbench that verifies register file reads, writes, x0, and write enable.
+- `tb/tb_imm_gen.sv`: Testbench that verifies I, S, B, U, and J immediate formats.
 - `Makefile`: Builds and runs the simulation with Icarus Verilog.
 
 ## How to Run
@@ -137,6 +192,12 @@ To run the register file test:
 make sim_reg
 ```
 
+To run the immediate generator test:
+
+```sh
+make sim_imm
+```
+
 The PC simulation creates:
 
 - `build/tb_pc_path.vvp`: compiled simulation file
@@ -146,6 +207,14 @@ The register file simulation creates:
 
 - `build/tb_reg_file.vvp`: compiled simulation file
 - `build/reg_file.vcd`: waveform file
+
+The immediate generator simulation creates:
+
+- `build/tb_imm_gen.vvp`: compiled simulation file
+- `build/imm_gen.vcd`: waveform file
+
+Generated build files such as `build/tb_imm_gen.vvp` and `build/imm_gen.vcd`
+should not be committed to GitHub.
 
 To remove generated files:
 
