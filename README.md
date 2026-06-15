@@ -8,6 +8,7 @@ The current building blocks are:
 - Program Counter path
 - Register file
 - Immediate generator
+- Instruction memory
 
 ## What Is the PC?
 
@@ -166,6 +167,72 @@ instruction[31:0]
 | `src/imm_gen.sv` | Extracts and sign-extends RISC-V immediates |
 | `tb/tb_imm_gen.sv` | Tests I, S, B, U, and J immediate formats |
 
+## Instruction Memory
+
+Instruction memory stores the program instructions for the CPU.
+The Program Counter gives instruction memory an address, and instruction memory
+outputs the 32-bit instruction stored at that address as `instr[31:0]`.
+
+RV32I instructions are 32 bits wide, which is 4 bytes.
+That is why normal execution uses `PC + 4`: the next instruction usually starts
+4 bytes after the current instruction.
+
+The PC gives a byte address, but the instruction memory array is organized as
+32-bit instruction words. The expression `addr[31:2]` drops the bottom two
+address bits and converts the byte address into a word index:
+
+```text
+addr = 0   -> addr[31:2] = 0
+addr = 4   -> addr[31:2] = 1
+addr = 8   -> addr[31:2] = 2
+addr = 12  -> addr[31:2] = 3
+```
+
+This module does not decode or execute instructions.
+It only returns instruction bits. Later, decode and control logic will look at
+those bits and decide what the CPU should do.
+
+Instruction memory is different from data memory:
+
+- instruction memory stores the program
+- data memory stores program data, such as variables, stack values, and loaded or stored words
+
+```text
+pc_current[31:0]
+        |
+        v
+   instr_mem
+        |
+        v
+   instr[31:0]
+        |
+        v
+ future decode/control
+```
+
+```text
+             +---------+
+             | pc_reg  |
+             +---------+
+                  |
+                  v
+             instr_mem
+                  |
+                  v
+             instr[31:0]
+```
+
+| File | Purpose |
+|---|---|
+| `src/instr_mem.sv` | Stores and outputs 32-bit RV32I instructions |
+| `tb/tb_instr_mem.sv` | Tests hardcoded instruction memory contents |
+| `tb/tb_instr_mem_hex.sv` | Tests loading instructions from a .hex file |
+| `programs/simple_program.hex` | Small example machine-code program |
+
+Some simulators do not allow comments inside `.hex` files, so
+`programs/simple_program.hex` is kept as plain hex only: one 32-bit instruction
+per line.
+
 ## Files
 
 - `src/pc_reg.sv`: 32-bit PC register with reset and write enable.
@@ -173,9 +240,13 @@ instruction[31:0]
 - `src/pc_next_mux.sv`: Chooses between `PC + 4` and a branch/jump target.
 - `src/reg_file.sv`: 32-register RV32I-style integer register file.
 - `src/imm_gen.sv`: Extracts and sign-extends RISC-V immediates.
+- `src/instr_mem.sv`: ROM-style instruction memory for 32-bit RV32I instructions.
 - `tb/tb_pc_path.sv`: Testbench that connects and verifies the PC path.
 - `tb/tb_reg_file.sv`: Testbench that verifies register file reads, writes, x0, and write enable.
 - `tb/tb_imm_gen.sv`: Testbench that verifies I, S, B, U, and J immediate formats.
+- `tb/tb_instr_mem.sv`: Testbench for hardcoded instruction memory contents.
+- `tb/tb_instr_mem_hex.sv`: Testbench for loading instruction memory from a hex file.
+- `programs/simple_program.hex`: Plain hex example program for `$readmemh`.
 - `Makefile`: Builds and runs the simulation with Icarus Verilog.
 
 ## How to Run
@@ -198,6 +269,19 @@ To run the immediate generator test:
 make sim_imm
 ```
 
+To run the instruction memory tests:
+
+```sh
+make sim_instr
+make sim_instr_hex
+```
+
+To run all available simulations:
+
+```sh
+make sim_all
+```
+
 The PC simulation creates:
 
 - `build/tb_pc_path.vvp`: compiled simulation file
@@ -213,8 +297,18 @@ The immediate generator simulation creates:
 - `build/tb_imm_gen.vvp`: compiled simulation file
 - `build/imm_gen.vcd`: waveform file
 
+The instruction memory simulations create:
+
+- `build/tb_instr_mem.vvp`: compiled simulation file
+- `build/tb_instr_mem_hex.vvp`: compiled simulation file
+- `build/instr_mem.vcd`: waveform file
+- `build/instr_mem_hex.vcd`: waveform file
+
 Generated build files such as `build/tb_imm_gen.vvp` and `build/imm_gen.vcd`
 should not be committed to GitHub.
+Generated files such as `build/tb_instr_mem.vvp`, `build/tb_instr_mem_hex.vvp`,
+`build/instr_mem.vcd`, and `build/instr_mem_hex.vcd` should not be committed
+to GitHub.
 
 To remove generated files:
 
